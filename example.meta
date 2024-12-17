@@ -1,0 +1,13 @@
+obj :: Player {
+    health :: int
+    level :: int
+}
+
+obj :: Enemy {
+    health :: int
+}
+
+obj :: Ally {
+    # health :: int
+    friendship :: int
+}
