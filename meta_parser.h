@@ -62,6 +62,14 @@ typedef struct meta_object {
 } meta_object;
 
 /* FUNCTION DECLARATIONS */
+
+/**
+ * Parses a metadata file and generates a corresponding C header file with structs.
+ *
+ * @param input_file  Path to the input metadata file.
+ * @param output_file Path to the output C header file.
+ * @return 0 on success, -1 if an error occurs (e.g., file cannot be opened).
+ */
 int meta_parse(const char *input_file, const char *output_file);
 
 #endif /* META_PARSER_H */
@@ -69,15 +77,39 @@ int meta_parse(const char *input_file, const char *output_file);
 /* --------------------------- IMPLEMENTATION ---------------------------- */
 #ifdef META_PARSER_IMPLEMENTATION
 
+/**
+ * Trims leading whitespace (spaces or tabs) from a line of text.
+ *
+ * @param line [in, out] Pointer to the line to trim. It will be updated to skip over whitespace.
+ * @return 1 if the line becomes empty after trimming, 0 otherwise.
+ */
 static int meta_trim_line(char *line) {
     while (*line == ' ' || *line == '\t') line++;
     return *line == 0; /* Return true if line is empty */
 }
 
+/**
+ * Parses the start of an object definition from a line.
+ *
+ * Expected format: "obj :: ObjectName {"
+ *
+ * @param obj  Pointer to the `meta_object` to store the parsed object name.
+ * @param line Input line containing the object definition.
+ * @return 1 if parsing is successful, 0 otherwise.
+ */
 static int meta_parse_object_start(meta_object *obj, const char *line) {
     return sscanf(line, "obj :: %s {", obj->name) == 1;
 }
 
+/**
+ * Parses a single field definition within an object block.
+ *
+ * Expected format: "field_name :: field_type"
+ *
+ * @param obj  Pointer to the `meta_object` where the field will be stored.
+ * @param line Input line containing the field definition.
+ * @return 1 if parsing is successful, 0 otherwise.
+ */
 static int meta_parse_field(meta_object *obj, const char *line) {
     meta_field *field = &obj->fields[obj->field_count];
     if (line != NULL && *line == '#') return true;
@@ -88,6 +120,18 @@ static int meta_parse_field(meta_object *obj, const char *line) {
     return false;
 }
 
+/**
+ * Writes a typedef struct for the parsed object to the output file.
+ *
+ * Example output:
+ *     typedef struct ObjectNameData {
+ *         type field1;
+ *         type field2;
+ *     } ObjectNameData;
+ *
+ * @param out Pointer to the output file stream.
+ * @param obj Pointer to the `meta_object` containing the object and field definitions.
+ */
 static void meta_write_object(FILE *out, const meta_object *obj) {
     fprintf(out, "typedef struct %sData {\n", obj->name);
     for (int i = 0; i < obj->field_count; i++) {
@@ -96,6 +140,13 @@ static void meta_write_object(FILE *out, const meta_object *obj) {
     fprintf(out, "} %sData;\n\n", obj->name);
 }
 
+/**
+ * Parses an input metadata file and generates the corresponding C structs in an output file.
+ *
+ * @param input_file  Path to the input metadata file.
+ * @param output_file Path to the output C header file.
+ * @return 0 on success, -1 if an error occurs (e.g., file cannot be opened).
+ */
 int meta_parse(const char *input_file, const char *output_file) {
     FILE *in = fopen(input_file, "r");
     if (!in) return -1;
@@ -113,17 +164,21 @@ int meta_parse(const char *input_file, const char *output_file) {
     while (fgets(line, sizeof(line), in)) {
         if (meta_trim_line(line)) continue;
 
+        // Start of new object
         if (strncmp(line, "obj ::", 6) == 0) {
+            // Writeout previous object details
             if (in_object) {
                 meta_write_object(out, &obj);
             }
             memset(&obj, 0, sizeof(obj));
             in_object = meta_parse_object_start(&obj, line);
-
+        
+        // End of current object
         } else if (in_object && strstr(line, "}")) {
             meta_write_object(out, &obj);
             in_object = 0;
 
+        // Parse fields inside object
         } else if (in_object) {
             meta_parse_field(&obj, line);
         }
