@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.0 - public domain 
+/* meta_parser.h - v1.1 - public domain 
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
@@ -61,21 +61,40 @@ typedef struct meta_object {
     int field_count;
 } meta_object;
 
+struct {
+    meta_object objects[MAX_FIELDS];
+    size_t objects_length;
+} meta_parser_state;
+
 /* FUNCTION DECLARATIONS */
 
-/**
- * Parses a metadata file and generates a corresponding C header file with structs.
- *
- * @param input_file  Path to the input metadata file.
- * @param output_file Path to the output C header file.
- * @return 0 on success, -1 if an error occurs (e.g., file cannot be opened).
- */
+void meta_parse_init();
 int meta_parse(const char *input_file, const char *output_file);
 
 #endif /* META_PARSER_H */
 
 /* --------------------------- IMPLEMENTATION ---------------------------- */
 #ifdef META_PARSER_IMPLEMENTATION
+
+/**
+ * Appends an object to the global parser state.
+ *
+ * @param obj The object to append.
+ */
+static void meta_state_append(meta_object obj) {
+    if (meta_parser_state.objects_length < MAX_FIELDS) {
+        meta_parser_state.objects[meta_parser_state.objects_length++] = obj;
+    } else {
+        fprintf(stderr, "Error: Object list is full!\n");
+    }
+}
+
+/**
+ * Initializes the global parser state.
+ */
+void meta_parse_init() {
+    meta_parser_state.objects_length = 0;
+}
 
 /**
  * Trims leading whitespace (spaces or tabs) from a line of text.
@@ -98,7 +117,27 @@ static int meta_trim_line(char *line) {
  * @return 1 if parsing is successful, 0 otherwise.
  */
 static int meta_parse_object_start(meta_object *obj, const char *line) {
-    return sscanf(line, "obj :: %s {", obj->name) == 1;
+   if (sscanf(line, "obj :: %s {", obj->name) == 1) {
+        obj->field_count = 0;
+        meta_state_append(*obj);
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Checks if a given type matches an existing object name.
+ *
+ * @param type The field type to check.
+ * @return 1 if the type matches an object name, 0 otherwise.
+ */
+static int meta_is_object_type(const char *type) {
+    for (size_t i = 0; i < meta_parser_state.objects_length; i++) {
+        if (strcmp(type, meta_parser_state.objects[i].name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /**
@@ -113,11 +152,18 @@ static int meta_parse_object_start(meta_object *obj, const char *line) {
 static int meta_parse_field(meta_object *obj, const char *line) {
     meta_field *field = &obj->fields[obj->field_count];
     if (line != NULL && *line == '#') return true;
-    if (sscanf(line, "%s :: %s", field->name, field->type) == 2) {
+    char type[64];
+    if (sscanf(line, "%63s :: %63s", field->name, type) == 2) {
+        // Check if the type matches an existing object
+        if (meta_is_object_type(type)) {
+            snprintf(field->type, sizeof(field->type), "%sData", type);
+        } else {
+            strncpy(field->type, type, sizeof(field->type) - 1);
+        }
         obj->field_count++;
-        return true;
+        return 1;
     }
-    return false;
+    return 0;
 }
 
 /**
@@ -141,7 +187,7 @@ static void meta_write_object(FILE *out, const meta_object *obj) {
 }
 
 /**
- * Parses an input metadata file and generates the corresponding C structs in an output file.
+ * Parses a metadata file and generates a corresponding C header file with structs.
  *
  * @param input_file  Path to the input metadata file.
  * @param output_file Path to the output C header file.
@@ -190,6 +236,15 @@ int meta_parse(const char *input_file, const char *output_file) {
 }
 
 #endif /* META_PARSER_IMPLEMENTATION */
+
+/*
+    revision history:
+        1.1  (2024-12-17)  Added global state tracking; type-aware 
+                           field parsing; improved metadata handling 
+                           and struct generation.
+        1.0  (2024-12-17)  First push;
+*/
+
 
 /*
 
