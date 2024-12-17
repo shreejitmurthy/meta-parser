@@ -18,6 +18,8 @@
                 int health;
                 int level;
             } PlayerData;
+        
+        See the README.md for all features.
 
    LICENSE:
        See end of file for license information.
