@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.1 - public domain 
+/* meta_parser.h - v1.1
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
