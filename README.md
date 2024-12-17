@@ -7,7 +7,7 @@ This was made primarily to support serialisation and deserialisation for low lev
 The language serves as a lightweight schema definition format that describes objects and their fields. It is a a minimal, declarative language for defining data objects. Designed for simplicity and direct translation to C structs.
 
 ### Object Definition
-An object starts with the keyword obj `::`, followed by the object name and an opening brace `{`.
+An object starts with the keyword `obj ::`, followed by the object name and an opening brace `{`.
 ```
 obj :: Player {
 ```
