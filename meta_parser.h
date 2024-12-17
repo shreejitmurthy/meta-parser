@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.1
+/* meta_parser.h - v1.1.1
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
@@ -117,7 +117,7 @@ static int meta_trim_line(char *line) {
  * @return 1 if parsing is successful, 0 otherwise.
  */
 static int meta_parse_object_start(meta_object *obj, const char *line) {
-   if (sscanf(line, "obj :: %s {", obj->name) == 1) {
+   if (sscanf(line, "obj :: %63s {", obj->name) == 1) {
         obj->field_count = 0;
         meta_state_append(*obj);
         return 1;
@@ -239,10 +239,12 @@ int meta_parse(const char *input_file, const char *output_file) {
 
 /*
     revision history:
-        1.1  (2024-12-17)  Added global state tracking; type-aware 
-                           field parsing; improved metadata handling 
-                           and struct generation.
-        1.0  (2024-12-17)  First push;
+        1.1.1  (2024-12-17)  Ensure scanning of 63 symbols when reading
+                             strings
+        1.1.0  (2024-12-17)  Added global state tracking; type-aware 
+                             field parsing; improved metadata handling 
+                             and struct generation.
+        1.0.0  (2024-12-17)  First push;
 */
 
 
