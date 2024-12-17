@@ -7,10 +7,15 @@ This was made primarily to support serialisation and deserialisation for low lev
 The language serves as a lightweight schema definition format that describes objects and their fields. It is a a minimal, declarative language for defining data objects. Designed for simplicity and direct translation to C structs.
 
 ### Object Definition
-An object starts with the keyword obj `::`, followed by the object name and an opening brace `{`.\
-Example:
+An object starts with the keyword obj `::`, followed by the object name and an opening brace `{`.
 ```
 obj :: Player {
+```
+
+### Ending an Object
+An object block ends with a closing brace `}`.
+```
+}
 ```
 
 ### Field Definition
@@ -21,7 +26,6 @@ field_name :: field_type
 * `field_name`: The name of the field (who would have thought)
 * `field_type`: The data type of the field, which can be any valid C type (e.g. `int`, `float`, `char[32]`)
 <!-- EOL -->
-Example:
 ```
 {
     health :: int
@@ -29,16 +33,8 @@ Example:
 }
 ```
 
-### Ending an Object
-An object block ends with a closing brace `}`.\
-An exciting example:
-```
-}
-```
-
 ### Comments
-Lines beginning with `#` can be used for comments. Comments are NOT generated in the C header file (subject to change).\
-Example:
+Lines beginning with `#` can be used for comments. Comments are NOT generated in the C header file (subject to change).
 ```
 # This is a comment
 obj :: Weapon {
