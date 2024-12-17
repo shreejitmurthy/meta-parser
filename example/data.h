@@ -3,7 +3,12 @@
 typedef struct PlayerData {
    int health;
    int level;
+   float position;
 } PlayerData;
+
+typedef struct WorldData {
+   PlayerData player;
+} WorldData;
 
 typedef struct EnemyData {
    int health;
@@ -11,5 +16,6 @@ typedef struct EnemyData {
 
 typedef struct AllyData {
    int health;
+   int friendship;
 } AllyData;
 

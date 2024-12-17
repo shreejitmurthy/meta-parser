@@ -1,13 +1,21 @@
+# Player object
 obj :: Player {
     health :: int
     level :: int
+    position :: float
 }
 
+obj :: World {
+    player :: Player
+}
+
+# Enemy object
 obj :: Enemy {
     health :: int
 }
 
+# Ally object
 obj :: Ally {
     health :: int
-    # friendship :: int
+    friendship :: int
 }
