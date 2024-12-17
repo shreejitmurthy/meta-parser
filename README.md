@@ -24,7 +24,7 @@ Fields are defined inside an object block using the syntax:
 field_name :: field_type
 ```
 * `field_name`: The name of the field (who would have thought)
-* `field_type`: The data type of the field, which can be any valid C type (e.g. `int`, `float`, `char[32]`)
+* `field_type`: The data type of the field, which can be any valid C type (e.g. `int`, `float`, `char[32]`) as well as previously defined objects.
 <!-- EOL -->
 ```
 {
