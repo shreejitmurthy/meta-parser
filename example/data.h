@@ -10,6 +10,6 @@ typedef struct EnemyData {
 } EnemyData;
 
 typedef struct AllyData {
-   int friendship;
+   int health;
 } AllyData;
 

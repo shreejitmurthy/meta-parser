@@ -8,6 +8,6 @@ obj :: Enemy {
 }
 
 obj :: Ally {
-    # health :: int
-    friendship :: int
+    health :: int
+    # friendship :: int
 }
