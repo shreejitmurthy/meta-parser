@@ -154,17 +154,15 @@ typedef struct EnemyData {
 ```
 
 ## Rough Roadmap (Things TODO)
-- [x] Minor: Mostly complete compile-time safety.
-- [x] Patch: Disallow duplicate objects.
-- [ ] Patch: Allow comments without space following it, e.g. `#This is a comment` instead of only suppporting `# This is a comment`.
-- [ ] Collections: Support for arrays.
-- [ ] Minor: Type Enhancements
+- [x] *Minor* - Mostly complete compile-time safety.
+- [x] *Patch* - Disallow duplicate objects.
+- [ ] *Patch* - Allow comments without space following it, e.g. `#This is a comment` instead of only suppporting `# This is a comment`.
+- [ ] *Minor* - Collections: Support for arrays.
+- [ ] *Minor* - Type Enhancements
     - [ ] Custom type definitions (type aliases)
     - [ ] Constraints or validation rules for fields, generating runtime validation functions.
     - [ ] Enum support
-- [ ] Minor: Attributes (maybe)
-    - [ ] Field-level or object-level attributes that translate to C annotations.
-- [ ] Minor: Code blocks
-    - [ ] Suppport for embedding raw C code in the meta lang
-- [ ] Minor: Support for default fields, generating initialisation code.
+- [ ] *Minor* - Attributes (maybe): Field-level or object-level attributes that translate to C annotations.
+- [ ] *Minor* - Code blocks: Suppport for embedding raw C code in the meta lang
+- [ ] *Minor* - Support for default fields, generating initialisation code.
 
