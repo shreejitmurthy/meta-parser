@@ -8,14 +8,15 @@ typedef struct PlayerData {
 
 typedef struct WorldData {
    PlayerData player;
+   // Enemy enemy;  // Error: Unresolved or invalid type 'Enemy'
 } WorldData;
 
 typedef struct EnemyData {
-   int health;
+   // int !health;  // Error: Cannot use special characters or numbers in field names.
+   float position;
 } EnemyData;
 
-typedef struct AllyData {
-   int health;
-   int friendship;
-} AllyData;
+// Duplicate object name 'Enemy'
+// typedef struct EnemyData {
+// } EnemyData;
 

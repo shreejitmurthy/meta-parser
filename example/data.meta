@@ -7,15 +7,15 @@ obj :: Player {
 
 obj :: World {
     player :: Player
+    enemy :: Enemy
 }
 
 # Enemy object
 obj :: Enemy {
-    health :: int
+    !health :: int
+    position :: float
 }
 
-# Ally object
-obj :: Ally {
-    health :: int
-    friendship :: int
+obj :: Enemy {
+    var :: int
 }
