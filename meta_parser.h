@@ -52,6 +52,8 @@
 typedef struct meta_field {
     char name[MAX_NAME];
     char type[MAX_NAME];
+    int name_valid;
+    int type_valid;
 } meta_field;
 
 typedef struct meta_object {
@@ -139,6 +141,12 @@ static int meta_is_object_type(const char *type) {
     return 0;
 }
 
+static const char* valid_c_types[] = {
+    "int", "char", "float", "double", "short", "long",
+    "unsigned int", "unsigned char", "signed int",
+    "void", "struct", "union", "enum", NULL
+};
+
 /**
  * Parses a single field definition within an object block.
  *
@@ -149,19 +157,41 @@ static int meta_is_object_type(const char *type) {
  * @return 1 if parsing is successful, 0 otherwise.
  */
 static int meta_parse_field(meta_object *obj, const char *line) {
+    if (line != NULL && *line == '#') return 1; // Skip comment lines
+
+    if (obj->field_count >= MAX_FIELDS) {
+        fprintf(stderr, "Error: Maximum field count exceeded for object '%s'.\n", obj->name);
+        return 0;
+    }
+
     meta_field *field = &obj->fields[obj->field_count];
-    if (line != NULL && *line == '#') return 1;
     char type[64];
+
     if (sscanf(line, "%63s :: %63s", field->name, type) == 2) {
-        // Check if the type matches an existing object
+        // Check if the type matches a previously defined object type
         if (meta_is_object_type(type)) {
             snprintf(field->type, sizeof(field->type), "%sData", type);
+            field->type_valid = 1;
         } else {
-            strncpy(field->type, type, sizeof(field->type) - 1);
+            field->type_valid = 0;
+            for (int i = 0; valid_c_types[i] != NULL; i++) {
+                strncpy(field->type, type, sizeof(field->type) - 1);
+                if (strcmp(type, valid_c_types[i]) == 0) {
+                    field->type[sizeof(field->type) - 1] = '\0';
+                    field->type_valid = 1;
+                    break;
+                }
+            }
         }
+
+        if (!field->type_valid) {
+            fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'.\n", type, field->name);
+        }
+
         obj->field_count++;
         return 1;
     }
+
     return 0;
 }
 
@@ -180,7 +210,17 @@ static int meta_parse_field(meta_object *obj, const char *line) {
 static void meta_write_object(FILE *out, const meta_object *obj) {
     fprintf(out, "typedef struct %sData {\n", obj->name);
     for (int i = 0; i < obj->field_count; i++) {
-        fprintf(out, "   %s %s;\n", obj->fields[i].type, obj->fields[i].name);
+        if (obj->fields[i].type_valid) {
+            fprintf(out, "   %s %s;\n", obj->fields[i].type, obj->fields[i].name);
+        } else {
+            fprintf(
+                out, 
+                "   // %s %s;  // Error: Unresolved or invalid type '%s'\n",
+                obj->fields[i].type, 
+                obj->fields[i].name,
+                obj->fields[i].type
+            );
+        }
     }
     fprintf(out, "} %sData;\n\n", obj->name);
 }
