@@ -50,7 +50,8 @@ obj :: Weapon {
 ## Other Features
 **v1.2.0** added better error handling. The parser now detects when there is syntax error with field names or types. These error messages can be optionally logged to console, but will always be displayed as a comment in the generated file so as not to cause compile errors. 
 
-> NOTE: Console error and warnings can be enabled by writing `#define META_LOG_CONSOLE` and must be done *before* including `"meta_parser.h"`. 
+> [!IMPORTANT] 
+> Console error and warnings can be enabled by writing `#define META_LOG_CONSOLE` and must be done *before* including `"meta_parser.h"`. 
 
 Syntax errors will occur if a variable or type would cause an error in the C language, i.e. for special characters in names, or using an undefined type.\
 For example:
@@ -112,14 +113,12 @@ typedef struct AllyData {
 ```
 If an error is occured with an object, such as naming an object a C keyword or type, the struct is commented out, and no fields are written:
 ```
-# data.meta
-
 obj :: int {
     var :: int
     var1 :: float
 }
 ```
-Outputs:
+Equates to:
 ```c
 // Invalid object name 'int'
 // typedef struct intData {
@@ -127,9 +126,36 @@ Outputs:
 ```
 While *technically* it is possible to get away with using C types and/or keywords as object names, it means that the type (in this example, `int`) cannot be used later, as the parser would believe the C type to be a meta object.
 
+After **v1.2.1**, duplicate objects are commented out by the parser, and the fields are not written.
+> [!NOTE]
+> It will always be the second object that gets flagged as the duplicate.
+```
+# data.meta
+
+obj :: Enemy {
+    position :: float
+}
+
+obj :: Enemy {
+    var :: int
+}
+```
+Outputs:
+```c
+/* Auto-generated code - do not edit! */
+
+typedef struct EnemyData {
+   float position;
+} EnemyData;
+
+// Duplicate object name 'Enemy'
+// typedef struct EnemyData {
+// } EnemyData;
+```
+
 ## Rough Roadmap (Things TODO)
 - [x] Minor: Mostly complete compile-time safety.
-- [ ] Patch: Disallow duplicate objects.
+- [x] Patch: Disallow duplicate objects.
 - [ ] Patch: Allow comments without space following it, e.g. `#This is a comment` instead of only suppporting `# This is a comment`.
 - [ ] Collections: Support for arrays.
 - [ ] Minor: Type Enhancements
