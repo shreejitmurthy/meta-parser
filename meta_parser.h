@@ -297,7 +297,7 @@ static int meta_parse_field(meta_object *obj, const char *line) {
     char type[64];
 
     if (sscanf(line, "%63s :: %63s", field->name, type) == 2) {
-        if (!_meta_contains(field->name, "!#@$%^&*()")    && 
+        if (!_meta_contains(field->name, "!#@$%^&*()-")    && 
             !_meta_starts_with(field->name, "1234567890") &&
             !meta_is_valid_c_type(field->name))
         {
