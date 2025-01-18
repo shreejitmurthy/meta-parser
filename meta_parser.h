@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.2.1
+/* meta_parser.h - v1.2.2
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
@@ -146,7 +146,7 @@ static const char* c_keywords[] = {
 #define HASH_SIZE 64  // Ensure the load factor is ~0.5. (LF = (# items in array) / HASH_SIZE)
 
 // Simple hash function (djb2), see: https://theartincode.stanis.me/008-djb2/
-unsigned int hash(const char *str) {
+unsigned int _hash(const char *str) {
     unsigned long hash = 5381;
     while (*str) {
         hash = ((hash << 5) + hash) + *str;  // hash * 33 + c
@@ -162,7 +162,7 @@ static int _meta_is_valid_c_type(const char* input) {
     static int initialized = 0;
     if (!initialized) {
         for (int i = 0; valid_c_types[i] != NULL; i++) {
-            unsigned int h = hash(valid_c_types[i]);
+            unsigned int h = _hash(valid_c_types[i]);
 
             // Add to the hash bucket (linear chaining within the array)
             for (int j = 0; j < 4; j++) {
@@ -176,7 +176,7 @@ static int _meta_is_valid_c_type(const char* input) {
     }
 
     // Perform the lookup
-    unsigned int h = hash(input);
+    unsigned int h = _hash(input);
     for (int j = 0; j < 4 && validCTypes[h][j] != NULL; j++) {
         if (strcmp(input, validCTypes[h][j]) == 0) {
             // if (_meta_ends_with(input, "str")) return 1;
@@ -193,7 +193,7 @@ static int _meta_is_c_keyword(const char* input) {
     static int initialized = 0;
     if (!initialized) {
         for (int i = 0; c_keywords[i] != NULL; i++) {
-            unsigned int h = hash(c_keywords[i]);
+            unsigned int h = _hash(c_keywords[i]);
 
             // Add to the hash bucket (linear chaining within the array)
             for (int j = 0; j < 4; j++) {
@@ -207,7 +207,7 @@ static int _meta_is_c_keyword(const char* input) {
     }
 
     // Perform the lookup
-    unsigned int h = hash(input);
+    unsigned int h = _hash(input);
     for (int j = 0; j < 4 && cKeywords[h][j] != NULL; j++) {
         if (strcmp(input, cKeywords[h][j]) == 0) {
             return 1;
@@ -273,7 +273,7 @@ static void meta_state_append(meta_object obj) {
         meta_parser_state.objects[meta_parser_state.objects_length++] = obj;
     } else {
         #ifdef META_LOG_CONSOLE
-            fprintf(stderr, "Error: Object list is full!\n");
+            fprintf(stderr, "ERROR: Object list is full!\n");
         #endif
     }
 }
@@ -331,7 +331,7 @@ static int meta_parse_object_start(meta_object *obj, const char *line) {
 
         if (meta_is_object_type(obj->name)) {
             obj->duplicate = 1;
-            obj->valid = 0;  // Optional: Mark invalid if duplicates are disallowed
+            obj->valid = 0;
         }
 
         obj->field_count = 0;
@@ -344,7 +344,6 @@ static int meta_parse_object_start(meta_object *obj, const char *line) {
     }
     return 0;
 }
-
 
 /**
  * Parses a single field definition within an object block.
@@ -360,7 +359,7 @@ static int meta_parse_field(meta_object *obj, const char *line) {
 
     if (obj->field_count >= MAX_FIELDS) {
         #ifdef META_LOG_CONSOLE
-            fprintf(stderr, "Error: Maximum field count exceeded for object '%s'.\n", obj->name);
+            fprintf(stderr, "ERROR: Maximum field count exceeded for object '%s'.\n", obj->name);
         #endif
         return 0;
     }
@@ -391,12 +390,6 @@ static int meta_parse_field(meta_object *obj, const char *line) {
                 };
             }
         }
-        
-        #ifdef META_LOG_CONSOLE
-            if (!field->type_valid) {
-                fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'\n", type, field->name);
-            }
-        #endif
 
         obj->field_count++;
         return 1;
@@ -424,24 +417,31 @@ static void meta_write_object(FILE *out, const meta_object *obj) {
         fprintf(out, "// typedef struct %sData {\n", obj->name);
     } else fprintf(out, "typedef struct %sData {\n", obj->name);
     for (int i = 0; i < obj->field_count; i++) {
+        meta_field field = obj->fields[i];
         if (!obj->valid) break;
-        if (obj->fields[i].type_valid && obj->fields[i].name_valid) {
-            fprintf(out, "   %s %s;\n", obj->fields[i].type, obj->fields[i].name);
-        } else if (!obj->fields[i].type_valid) {
+        if (field.type_valid && field.name_valid) {
+            fprintf(out, "   %s %s;\n", field.type, field.name);
+        } else if (!field.type_valid) {
             fprintf(
                 out, 
                 "   // %s %s;  // Error: Unresolved or invalid type '%s'\n",
-                obj->fields[i].type, 
-                obj->fields[i].name,
-                obj->fields[i].type
+                field.type, 
+                field.name,
+                field.type
             );
-        } else if (!obj->fields[i].name_valid) {
+            #ifdef META_LOG_CONSOLE
+                fprintf(stderr, "ERROR: Unresolved or invalid type '%s' for field '%s.'\n", field.type,  field.name);
+            #endif
+        } else if (!field.name_valid) {
             fprintf(
                 out,
-                "   // %s %s;  // Error: Cannot use special characters or numbers in field names\n",
-                obj->fields[i].type,
-                obj->fields[i].name
+                "   // %s %s;  // Error: Cannot use special characters or numbers in field names.\n",
+                field.type,
+                field.name
             );
+            #ifdef META_LOG_CONSOLE
+                fprintf(stderr, "ERROR: Cannot use special characters or numbers in field names.\n");
+            #endif
         }
     }
     if (!obj->valid) fprintf(out, "// } %sData;\n\n", obj->name);
@@ -450,9 +450,9 @@ static void meta_write_object(FILE *out, const meta_object *obj) {
     #ifdef META_LOG_CONSOLE
         if (!obj->valid) {
             if (obj->duplicate) {
-                fprintf(stderr, "Warning: Duplicate object name '%s'.\n", obj->name);
+                fprintf(stderr, "ERROR: Duplicate object name '%s'.\n", obj->name);
             } else {
-                fprintf(stderr, "Warning: Invalid object name '%s'.\n", obj->name);
+                fprintf(stderr, "ERROR: Invalid object name '%s'.\n", obj->name);
             };
         }
     #endif
@@ -511,6 +511,8 @@ int meta_parse(const char *input_file, const char *output_file) {
 
 /*
     Revision history:
+        1.2.2  (2025-01-18)  Extra logging messages added where there
+                             was lacking some.
         1.2.1  (2025-01-18)  Patch fix to comment out duplicate objects
                              to ensure compile-safety.
         1.2.0  (2025-01-18)  Add support for console logging, syntax er-
@@ -525,7 +527,6 @@ int meta_parse(const char *input_file, const char *output_file) {
                              and struct generation.                     
         1.0.0  (2024-12-17)  First push.                                
 */
-
 
 /*
 
