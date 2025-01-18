@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.2.0
+/* meta_parser.h - v1.2.1
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
@@ -78,6 +78,145 @@ static int _meta_ends_with(const char *str, const char *chars) {
     return 0;
 }
 
+static const char* valid_c_types[] = {
+    "char",
+    "signed char",
+    "unsigned char",
+    "short",
+    "short int",
+    "signed short",
+    "signed short int",
+    "unsigned short",
+    "unsigned short int",
+    "int",
+    "signed int",
+    "unsigned int",
+    "long",
+    "long int",
+    "signed long",
+    "signed long int",
+    "unsigned long",
+    "unsigned long int",
+    "long long",
+    "long long int",
+    "signed long long",
+    "signed long long int",
+    "unsigned long long",
+    "unsigned long long int",
+    "float",
+    "double",
+    "long double",
+    "_Bool",
+    "size_t",
+
+    NULL  // Null terminator
+};
+
+static const char* c_keywords[] = {
+    "auto",
+    "break",
+    "case",
+    "char",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "else",
+    "enum",
+    "extern",
+    "for",
+    "goto",
+    "if",
+    "register",
+    "return",
+    "sizeof",
+    "static",
+    "struct",
+    "switch",
+    "typedef",
+    "union",
+    "unsigned",
+    "void",
+    "volatile",
+    "while",
+
+    NULL
+};
+
+#define HASH_SIZE 64  // Ensure the load factor is ~0.5. (LF = (# items in array) / HASH_SIZE)
+
+// Simple hash function (djb2), see: https://theartincode.stanis.me/008-djb2/
+unsigned int hash(const char *str) {
+    unsigned long hash = 5381;
+    while (*str) {
+        hash = ((hash << 5) + hash) + *str;  // hash * 33 + c
+        str++;
+    }
+    return hash % HASH_SIZE;
+}
+
+static int _meta_is_valid_c_type(const char* input) {
+    static const char *validCTypes[HASH_SIZE][4] = {{NULL}};  // Chained buckets with up to 4 items per bucket
+
+    // Initialize the hash map only once
+    static int initialized = 0;
+    if (!initialized) {
+        for (int i = 0; valid_c_types[i] != NULL; i++) {
+            unsigned int h = hash(valid_c_types[i]);
+
+            // Add to the hash bucket (linear chaining within the array)
+            for (int j = 0; j < 4; j++) {
+                if (validCTypes[h][j] == NULL) {
+                    validCTypes[h][j] = valid_c_types[i];
+                    break;
+                }
+            }
+        }
+        initialized = 1;
+    }
+
+    // Perform the lookup
+    unsigned int h = hash(input);
+    for (int j = 0; j < 4 && validCTypes[h][j] != NULL; j++) {
+        if (strcmp(input, validCTypes[h][j]) == 0) {
+            // if (_meta_ends_with(input, "str")) return 1;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int _meta_is_c_keyword(const char* input) {
+    static const char *cKeywords[HASH_SIZE][4] = {{NULL}};  // Chained buckets with up to 4 items per bucket
+
+    // Initialize the hash map only once
+    static int initialized = 0;
+    if (!initialized) {
+        for (int i = 0; c_keywords[i] != NULL; i++) {
+            unsigned int h = hash(c_keywords[i]);
+
+            // Add to the hash bucket (linear chaining within the array)
+            for (int j = 0; j < 4; j++) {
+                if (cKeywords[h][j] == NULL) {
+                    cKeywords[h][j] = c_keywords[i];
+                    break;
+                }
+            }
+        }
+        initialized = 1;
+    }
+
+    // Perform the lookup
+    unsigned int h = hash(input);
+    for (int j = 0; j < 4 && cKeywords[h][j] != NULL; j++) {
+        if (strcmp(input, cKeywords[h][j]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 #define MAX_LINE 256
 #define MAX_NAME 64
 #define MAX_FIELDS 50
@@ -105,6 +244,8 @@ typedef struct meta_object {
     char name[MAX_NAME];
     meta_field fields[MAX_FIELDS];
     int field_count;
+    int valid;
+    int duplicate;
 } meta_object;
 
 struct {
@@ -138,6 +279,21 @@ static void meta_state_append(meta_object obj) {
 }
 
 /**
+ * Checks if a given type matches an existing object.
+ *
+ * @param type The field type to check.
+ * @return 1 if the type matches an object name, 0 otherwise.
+ */
+static int meta_is_object_type(const char *type) {
+    for (size_t i = 0; i < meta_parser_state.objects_length; ++i) {
+        if (strcmp(type, meta_parser_state.objects[i].name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
  * Initializes the global parser state.
  */
 void meta_parse_init() {
@@ -165,114 +321,30 @@ static int meta_trim_line(char *line) {
  * @return 1 if parsing is successful, 0 otherwise.
  */
 static int meta_parse_object_start(meta_object *obj, const char *line) {
-   if (sscanf(line, "obj :: %63s {", obj->name) == 1) {
+    if (sscanf(line, "obj :: %63s {", obj->name) == 1) {
+        obj->valid = 0;
+        obj->duplicate = 0;
+
+        if (!_meta_is_valid_c_type(obj->name) && !_meta_is_c_keyword(obj->name)) {
+            obj->valid = 1;
+        }
+
+        if (meta_is_object_type(obj->name)) {
+            obj->duplicate = 1;
+            obj->valid = 0;  // Optional: Mark invalid if duplicates are disallowed
+        }
+
         obj->field_count = 0;
-        meta_state_append(*obj);
+
+        if (!obj->duplicate) {
+            meta_state_append(*obj);
+        }
+
         return 1;
     }
     return 0;
 }
 
-/**
- * Checks if a given type matches an existing object name.
- *
- * @param type The field type to check.
- * @return 1 if the type matches an object name, 0 otherwise.
- */
-static int meta_is_object_type(const char *type) {
-    for (size_t i = 0; i < meta_parser_state.objects_length; i++) {
-        if (strcmp(type, meta_parser_state.objects[i].name) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static const char* valid_c_types[] = {
-    "char",
-    "signed char",
-    "unsigned char",
-    "short",
-    "short int",
-    "signed short",
-    "signed short int",
-    "unsigned short",
-    "unsigned short int",
-    "int",
-    "signed int",
-    "unsigned int",
-    "long",
-    "long int",
-    "signed long",
-    "signed long int",
-    "unsigned long",
-    "unsigned long int",
-    "long long",
-    "long long int",
-    "signed long long",
-    "signed long long int",
-    "unsigned long long",
-    "unsigned long long int",
-
-    "float",
-    "double",
-    "long double",
-
-    "_Bool",
-
-    "size_t",
-
-    NULL  // Null terminator
-};
-
-#define HASH_SIZE 64  // Ensure the load factor is ~0.5. (LF = (# items in array) / HASH_SIZE)
-
-// Simple hash function (djb2), see: https://theartincode.stanis.me/008-djb2/
-unsigned int hash(const char *str) {
-    unsigned long hash = 5381;
-    while (*str) {
-        hash = ((hash << 5) + hash) + *str;  // hash * 33 + c
-        str++;
-    }
-    return hash % HASH_SIZE;
-}
-
-/**
- * Checks if a string type is a valid and supported C type.
- * 
- * @param input String of the type to check.
- * @return 1 if type is valid, 0 if type is invalid. 
- */
-static int meta_is_valid_c_type(const char* input) {
-    static const char *validCTypes[HASH_SIZE][4] = {{NULL}};  // Chained buckets with up to 4 items per bucket
-
-    // Initialize the hash map only once
-    static int initialized = 0;
-    if (!initialized) {
-        for (int i = 0; valid_c_types[i] != NULL; i++) {
-            unsigned int h = hash(valid_c_types[i]);
-
-            // Add to the hash bucket (linear chaining within the array)
-            for (int j = 0; j < 4; j++) {
-                if (validCTypes[h][j] == NULL) {
-                    validCTypes[h][j] = valid_c_types[i];
-                    break;
-                }
-            }
-        }
-        initialized = 1;
-    }
-
-    // Perform the lookup
-    unsigned int h = hash(input);
-    for (int j = 0; j < 4 && validCTypes[h][j] != NULL; j++) {
-        if (strcmp(input, validCTypes[h][j]) == 0) {
-            // if (_meta_ends_with(input, "str")) return 1;
-            return 1;
-        }
-    }
-    return 0;
-}
 
 /**
  * Parses a single field definition within an object block.
@@ -299,7 +371,7 @@ static int meta_parse_field(meta_object *obj, const char *line) {
     if (sscanf(line, "%63s :: %63s", field->name, type) == 2) {
         if (!_meta_contains(field->name, "!#@$%^&*()-")    && 
             !_meta_starts_with(field->name, "1234567890") &&
-            !meta_is_valid_c_type(field->name))
+            !_meta_is_valid_c_type(field->name))
         {
             field->name_valid = 1;
         }
@@ -312,7 +384,7 @@ static int meta_parse_field(meta_object *obj, const char *line) {
             field->type_valid = 0;
             for (int i = 0; valid_c_types[i] != NULL; i++) {
                 strncpy(field->type, type, sizeof(field->type) - 1);
-                if (meta_is_valid_c_type(type)) {
+                if (_meta_is_valid_c_type(type)) {
                     field->type[sizeof(field->type) - 1] = '\0';
                     field->type_valid = 1;
                     break;
@@ -322,7 +394,7 @@ static int meta_parse_field(meta_object *obj, const char *line) {
         
         #ifdef META_LOG_CONSOLE
             if (!field->type_valid) {
-                fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'.\n", type, field->name);
+                fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'\n", type, field->name);
             }
         #endif
 
@@ -346,8 +418,13 @@ static int meta_parse_field(meta_object *obj, const char *line) {
  * @param obj Pointer to the `meta_object` containing the object and field definitions.
  */
 static void meta_write_object(FILE *out, const meta_object *obj) {
-    fprintf(out, "typedef struct %sData {\n", obj->name);
+    if (!obj->valid) {
+        if (obj->duplicate) fprintf(out, "// Duplicate object name '%s'\n", obj->name);
+        else fprintf(out, "// Invalid object name '%s'\n", obj->name);
+        fprintf(out, "// typedef struct %sData {\n", obj->name);
+    } else fprintf(out, "typedef struct %sData {\n", obj->name);
     for (int i = 0; i < obj->field_count; i++) {
+        if (!obj->valid) break;
         if (obj->fields[i].type_valid && obj->fields[i].name_valid) {
             fprintf(out, "   %s %s;\n", obj->fields[i].type, obj->fields[i].name);
         } else if (!obj->fields[i].type_valid) {
@@ -367,7 +444,18 @@ static void meta_write_object(FILE *out, const meta_object *obj) {
             );
         }
     }
-    fprintf(out, "} %sData;\n\n", obj->name);
+    if (!obj->valid) fprintf(out, "// } %sData;\n\n", obj->name);
+    else fprintf(out, "} %sData;\n\n", obj->name); 
+
+    #ifdef META_LOG_CONSOLE
+        if (!obj->valid) {
+            if (obj->duplicate) {
+                fprintf(stderr, "Warning: Duplicate object name '%s'.\n", obj->name);
+            } else {
+                fprintf(stderr, "Warning: Invalid object name '%s'.\n", obj->name);
+            };
+        }
+    #endif
 }
 
 /**
@@ -422,7 +510,9 @@ int meta_parse(const char *input_file, const char *output_file) {
 #endif /* META_PARSER_IMPLEMENTATION */
 
 /*
-    revision history:
+    Revision history:
+        1.2.1  (2025-01-18)  Patch fix to comment out duplicate objects
+                             to ensure compile-safety.
         1.2.0  (2025-01-18)  Add support for console logging, syntax er-
                              ror handling with comments, and hash check-
                              ing for validating meta field to C types.  
