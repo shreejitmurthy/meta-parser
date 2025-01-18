@@ -1,4 +1,4 @@
-/* meta_parser.h - v1.1.2
+/* meta_parser.h - v1.2.0
    An STB-Style single-file C header library for generating C structs from metadata files.
    This was done for fun!
 
@@ -32,6 +32,51 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+#define CHAR_SET_SIZE 256
+
+static int _meta_contains(const char *str, const char* chars) {
+    int char_lookup[CHAR_SET_SIZE] = {0};
+    while (*chars) {
+        char_lookup[(unsigned char)*chars] = 1;
+        chars++;
+    }
+    while (*str) {
+        if (char_lookup[(unsigned char)*str]) {
+            return 1;
+        }
+        str++;
+    }
+    return 0;
+}
+
+static int _meta_starts_with(const char *str, const char* chars) {
+    int char_lookup[CHAR_SET_SIZE] = {0};
+    while (*chars) {
+        char_lookup[(unsigned char)*chars] = 1;
+        chars++;
+    }
+    if (str && *str && char_lookup[(unsigned char)*str]) {
+        return 1;
+    }
+
+    return 0;
+}
+
+static int _meta_ends_with(const char *str, const char *chars) {
+    int char_lookup[CHAR_SET_SIZE] = {0};
+    while (*chars) {
+        char_lookup[(unsigned char)*chars] = 1;
+        chars++;
+    }
+    if (str && *str) {
+        const char *last_char = str + strlen(str) - 1;
+        if (char_lookup[(unsigned char)*last_char]) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 #define MAX_LINE 256
 #define MAX_NAME 64
@@ -100,7 +145,7 @@ void meta_parse_init() {
 /**
  * Trims leading whitespace (spaces or tabs) from a line of text.
  *
- * @param line [in, out] Pointer to the line to trim. It will be updated to skip over whitespace.
+ * @param line Pointer to the line to trim. It will be updated to skip over whitespace.
  * @return 1 if the line becomes empty after trimming, 0 otherwise.
  */
 static int meta_trim_line(char *line) {
@@ -142,10 +187,90 @@ static int meta_is_object_type(const char *type) {
 }
 
 static const char* valid_c_types[] = {
-    "int", "char", "float", "double", "short", "long",
-    "unsigned int", "unsigned char", "signed int",
-    "void", "struct", "union", "enum", NULL
+    "char",
+    "signed char",
+    "unsigned char",
+    "short",
+    "short int",
+    "signed short",
+    "signed short int",
+    "unsigned short",
+    "unsigned short int",
+    "int",
+    "signed int",
+    "unsigned int",
+    "long",
+    "long int",
+    "signed long",
+    "signed long int",
+    "unsigned long",
+    "unsigned long int",
+    "long long",
+    "long long int",
+    "signed long long",
+    "signed long long int",
+    "unsigned long long",
+    "unsigned long long int",
+
+    "float",
+    "double",
+    "long double",
+
+    "_Bool",
+
+    "size_t",
+
+    NULL  // Null terminator
 };
+
+#define HASH_SIZE 64  // Ensure the load factor is ~0.5. (LF = (# items in array) / HASH_SIZE)
+
+// Simple hash function (djb2), see: https://theartincode.stanis.me/008-djb2/
+unsigned int hash(const char *str) {
+    unsigned long hash = 5381;
+    while (*str) {
+        hash = ((hash << 5) + hash) + *str;  // hash * 33 + c
+        str++;
+    }
+    return hash % HASH_SIZE;
+}
+
+/**
+ * Checks if a string type is a valid and supported C type.
+ * 
+ * @param input String of the type to check.
+ * @return 1 if type is valid, 0 if type is invalid. 
+ */
+static int meta_is_valid_c_type(const char* input) {
+    static const char *validCTypes[HASH_SIZE][4] = {{NULL}};  // Chained buckets with up to 4 items per bucket
+
+    // Initialize the hash map only once
+    static int initialized = 0;
+    if (!initialized) {
+        for (int i = 0; valid_c_types[i] != NULL; i++) {
+            unsigned int h = hash(valid_c_types[i]);
+
+            // Add to the hash bucket (linear chaining within the array)
+            for (int j = 0; j < 4; j++) {
+                if (validCTypes[h][j] == NULL) {
+                    validCTypes[h][j] = valid_c_types[i];
+                    break;
+                }
+            }
+        }
+        initialized = 1;
+    }
+
+    // Perform the lookup
+    unsigned int h = hash(input);
+    for (int j = 0; j < 4 && validCTypes[h][j] != NULL; j++) {
+        if (strcmp(input, validCTypes[h][j]) == 0) {
+            // if (_meta_ends_with(input, "str")) return 1;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /**
  * Parses a single field definition within an object block.
@@ -168,6 +293,13 @@ static int meta_parse_field(meta_object *obj, const char *line) {
     char type[64];
 
     if (sscanf(line, "%63s :: %63s", field->name, type) == 2) {
+        if (!_meta_contains(field->name, "!#@$%^&*()")    && 
+            !_meta_starts_with(field->name, "1234567890") &&
+            !meta_is_valid_c_type(field->name))
+        {
+            field->name_valid = 1;
+        }
+
         // Check if the type matches a previously defined object type
         if (meta_is_object_type(type)) {
             snprintf(field->type, sizeof(field->type), "%sData", type);
@@ -176,17 +308,19 @@ static int meta_parse_field(meta_object *obj, const char *line) {
             field->type_valid = 0;
             for (int i = 0; valid_c_types[i] != NULL; i++) {
                 strncpy(field->type, type, sizeof(field->type) - 1);
-                if (strcmp(type, valid_c_types[i]) == 0) {
+                if (meta_is_valid_c_type(type)) {
                     field->type[sizeof(field->type) - 1] = '\0';
                     field->type_valid = 1;
                     break;
-                }
+                };
             }
         }
-
-        if (!field->type_valid) {
-            fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'.\n", type, field->name);
-        }
+        
+        #ifdef META_LOG_CONSOLE
+            if (!field->type_valid) {
+                fprintf(stderr, "Warning: Unresolved or invalid type '%s' for field '%s'.\n", type, field->name);
+            }
+        #endif
 
         obj->field_count++;
         return 1;
@@ -210,15 +344,22 @@ static int meta_parse_field(meta_object *obj, const char *line) {
 static void meta_write_object(FILE *out, const meta_object *obj) {
     fprintf(out, "typedef struct %sData {\n", obj->name);
     for (int i = 0; i < obj->field_count; i++) {
-        if (obj->fields[i].type_valid) {
+        if (obj->fields[i].type_valid && obj->fields[i].name_valid) {
             fprintf(out, "   %s %s;\n", obj->fields[i].type, obj->fields[i].name);
-        } else {
+        } else if (!obj->fields[i].type_valid) {
             fprintf(
                 out, 
                 "   // %s %s;  // Error: Unresolved or invalid type '%s'\n",
                 obj->fields[i].type, 
                 obj->fields[i].name,
                 obj->fields[i].type
+            );
+        } else if (!obj->fields[i].name_valid) {
+            fprintf(
+                out,
+                "   // %s %s;  // Error: Cannot use special characters or numbers in field names\n",
+                obj->fields[i].type,
+                obj->fields[i].name
             );
         }
     }
@@ -278,14 +419,17 @@ int meta_parse(const char *input_file, const char *output_file) {
 
 /*
     revision history:
-        1.1.2  (2025-01-18)  Remove <stdbool.h> and ensure consistency
-                             between true/false and 1/0.
-        1.1.1  (2024-12-17)  Ensure scanning of 63 symbols when reading
-                             strings
-        1.1.0  (2024-12-17)  Added global state tracking; type-aware 
-                             field parsing; improved metadata handling 
-                             and struct generation.
-        1.0.0  (2024-12-17)  First push;
+        1.2.0  (2025-01-18)  Add support for console logging, syntax er-
+                             ror handling with comments, and hash check-
+                             ing for validating meta field to C types.  
+        1.1.2  (2025-01-18)  Remove <stdbool.h> and ensure consistency  
+                             between true/false and 1/0.                
+        1.1.1  (2024-12-17)  Ensure scanning of 63 symbols when reading 
+                             strings.                                   
+        1.1.0  (2024-12-17)  Added global state tracking; type-aware    
+                             field parsing; improved metadata handling  
+                             and struct generation.                     
+        1.0.0  (2024-12-17)  First push.                                
 */
 
 
