@@ -131,7 +131,9 @@ static void meta_state_append(meta_object obj) {
     if (meta_parser_state.objects_length < MAX_FIELDS) {
         meta_parser_state.objects[meta_parser_state.objects_length++] = obj;
     } else {
-        fprintf(stderr, "Error: Object list is full!\n");
+        #ifdef META_LOG_CONSOLE
+            fprintf(stderr, "Error: Object list is full!\n");
+        #endif
     }
 }
 
@@ -285,7 +287,9 @@ static int meta_parse_field(meta_object *obj, const char *line) {
     if (line != NULL && *line == '#') return 1; // Skip comment lines
 
     if (obj->field_count >= MAX_FIELDS) {
-        fprintf(stderr, "Error: Maximum field count exceeded for object '%s'.\n", obj->name);
+        #ifdef META_LOG_CONSOLE
+            fprintf(stderr, "Error: Maximum field count exceeded for object '%s'.\n", obj->name);
+        #endif
         return 0;
     }
 
